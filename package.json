@@ -2,6 +2,9 @@
     "name": "vscode-protolint",
     "displayName": "vscode-protolint",
     "description": "Wrapper for VSCode to lint your proto files using protoc-gen-lint (https://github.com/ckaznocha/protoc-gen-lint)",
+    "repository": {
+        "url": "https://github.com/mfuentesg/vscode-protolint"
+    },
     "version": "0.0.1",
     "publisher": "mfuentesg",
     "engines": {
