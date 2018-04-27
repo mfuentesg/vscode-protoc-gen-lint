@@ -1,15 +1,22 @@
 'use strict';
 
 import * as vscode from 'vscode';
-import Linter, { LinterError, LinterHandler } from './linter';
+import Linter, { LinterError } from './linter';
 
+const commandId = 'extension.protolint';
 
 function doLint(
-  document: vscode.TextDocument,
-  diagnosticCollection: vscode.DiagnosticCollection
-): LinterHandler {
-  return function(errors: LinterError[]) {
-    diagnosticCollection.clear();
+  { fileName, languageId, uri }: vscode.TextDocument,
+  collection: vscode.DiagnosticCollection,
+  didOpen: boolean = false
+): void {
+  const linter = new Linter();
+  collection.clear();
+
+  linter.lint(fileName, { didOpen, languageId }, (errors: LinterError[]): void => {
+    if (!errors.length) {
+      return;
+    }
     const diagnostics = errors.map(error => {
       const range = new vscode.Range(
         new vscode.Position(error.line - 1, error.range.start - 1),
@@ -19,30 +26,27 @@ function doLint(
       return new vscode.Diagnostic(range, error.reason, vscode.DiagnosticSeverity.Warning);
     });
 
-    diagnosticCollection.set(document.uri, diagnostics);
-  };
+    collection.set(uri, diagnostics);
+  });
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  const diagnosticCollection = vscode.languages.createDiagnosticCollection("protoc-gen-lint");
+  const diagnosticCollection = vscode.languages.createDiagnosticCollection(commandId);
 
-  let disposable = vscode.commands.registerCommand('extension.protolint', () => {
-    const linter = new Linter();
-
-    vscode.workspace.onDidSaveTextDocument(linter.lint);
-    vscode.workspace.onDidOpenTextDocument(function() {
-      const editor = vscode.window.activeTextEditor;
-      if (editor) {
-          linter.lint(editor.document, doLint(editor.document, diagnosticCollection), true);
-      }
+  let disposable = vscode.commands.registerCommand(commandId, () => {
+    vscode.workspace.onDidSaveTextDocument((document: vscode.TextDocument) => {
+      doLint(document, diagnosticCollection);
     });
 
-    vscode.workspace.onWillSaveTextDocument(function(event: vscode.TextDocumentWillSaveEvent) {
-      linter.lint(event.document, doLint(event.document, diagnosticCollection));
+    vscode.workspace.onDidOpenTextDocument(() => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        doLint(editor.document, diagnosticCollection, true);
+      }
     });
   });
 
-  vscode.commands.executeCommand("extension.protolint");
+  vscode.commands.executeCommand(commandId);
   context.subscriptions.push(disposable);
 }
 

@@ -1,5 +1,4 @@
 import * as cp from 'child_process';
-import { TextDocument } from 'vscode';
 import * as path from 'path';
 
 interface LinterErrorRange {
@@ -13,8 +12,13 @@ export interface LinterError {
   range: LinterErrorRange;
 }
 
-export interface LinterHandler {
+interface LinterHandler {
   (errors: LinterError[]): void;
+}
+
+export interface LinterOptions {
+  didOpen: boolean;
+  languageId: string;
 }
 
 export default class Linter {
@@ -28,10 +32,6 @@ export default class Linter {
         reject(stderr);
       });
     });
-  }
-
-  private shouldDocumentUpdate(document: TextDocument): boolean {
-    return document.isDirty && document.languageId.includes('proto');
   }
 
   private buildLinterError(error: string): LinterError | null {
@@ -75,27 +75,36 @@ export default class Linter {
   }
 
   public lint(
-    document: TextDocument,
-    handleError: LinterHandler | null = null,
-    isFirstLoad: boolean = false
-  ) {
-    if (isFirstLoad && !document.languageId.includes('proto')) {
+    fileName: string,
+    options: LinterOptions,
+    handler: LinterHandler | null = null
+  ): void {
+    const opts: LinterOptions = Object.assign({}, {
+      didOpen: false,
+      languageId: 'proto'
+    }, options);
+
+    const isProtoFile = options.languageId.includes('proto');
+
+    if (opts.didOpen && !isProtoFile) {
         return;
     }
 
-    if (!isFirstLoad && !this.shouldDocumentUpdate(document)) {
+    if (!opts.didOpen && !isProtoFile) {
         return;
     }
 
-    const dirname = path.dirname(document.fileName);
-    const filename = path.basename(document.fileName);
+    const dirname = path.dirname(fileName);
+    const filename = path.basename(fileName);
     const cmd = `protoc --proto_path=${dirname} ${filename} --lint_out=.`;
 
     // @TODO detect when command does not exist
-    this.exec(cmd).catch((error) => {
-      if (handleError) {
-        handleError(this.parseErrors(document.fileName, error));
-      }
-    });
+    const result = this.exec(cmd);
+
+    if (handler) {
+      result
+        .then(() => handler([]))
+        .catch((error) => handler(this.parseErrors(fileName, error)));
+    }
   }
 }
